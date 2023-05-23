@@ -8,7 +8,6 @@ utils = rpackages.importr("utils")
 utils.chooseCRANmirror(ind=1)  # select the first mirror in the list
 
 # R package names
-
 packnames = ("glmnet", "gbm", "randomForest", "hdbinseg")
 
 # R vector of strings
