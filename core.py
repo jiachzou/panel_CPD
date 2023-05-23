@@ -1,12 +1,11 @@
-from sklearn.linear_model import LassoCV, LassoLarsCV
-from scipy.sparse import vstack, coo_matrix
+from sklearn.linear_model import LassoCV
+from scipy.sparse import vstack
 from sklearn.metrics import confusion_matrix
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from sklearn.model_selection import cross_validate, KFold
+from sklearn.model_selection import KFold
 from selectinf.algorithms.api import lasso
-
 
 from collections import Counter
 from matplotlib import pyplot as plt
