@@ -7,7 +7,7 @@ from tqdm import tqdm
 from sklearn.model_selection import cross_validate, KFold
 from selectinf.algorithms.api import lasso
 
-from dp import rDP
+
 from collections import Counter
 from matplotlib import pyplot as plt
 from joblib import Parallel, delayed
@@ -23,8 +23,89 @@ from sklearn.linear_model import LinearRegression
 rpy2.robjects.numpy2ri.activate()
 hdbinseg = rpackages.importr("hdbinseg")
 
+def rDP(x, Tau, ratio, Kmax):
+    """
+    Perform rDP algorithm on input data.
+
+    Parameters:
+    -----------
+    x : array_like
+        Input data. Can be either a 1D array of length T or a 2D matrix of shape T x N.
+    Tau : list
+        Potential changepoint locations. It is the output from the lasso algorithm.
+    ratio : float
+        Ratio threshold used to determine the stopping condition for the algorithm.
+    Kmax : int
+        Maximum number of selected points.
+
+    Returns:
+    --------
+    list
+        List of indices representing the detected changepoints.
+
+
+    """
+    Tau = list(Tau) + [len(x)]
+    N_choice = len(Tau)
+    mem_arr = np.zeros((Kmax + 1, N_choice))
+    jumps = np.zeros((Kmax + 1, N_choice))
+
+    J = None
+
+    for k in range(Kmax + 1):
+        if k == 0:
+            for i in range(N_choice):
+                mem_arr[k, i] = np.sum(
+                    np.power(x[: Tau[i]] - np.mean(x[: Tau[i]], axis=0), 2)
+                )
+        else:
+            for i in range(k + 1, N_choice):
+                comps = []
+                for prev_i in range(k, i):
+                    comps.append(
+                        mem_arr[k - 1, prev_i]
+                        + np.sum(
+                            np.power(
+                                x[Tau[prev_i] : Tau[i]]
+                                - np.mean(x[Tau[prev_i] : Tau[i]], axis=0),
+                                2,
+                            )
+                        )
+                    )
+                mem_arr[k, i] = min(comps)
+                jumps[k, i] = np.argmin(comps) + k
+
+            if mem_arr[k, -1] / J > ratio or k == Kmax:
+                jumps_idces = [jumps[k, -1]]
+                for i in range(k - 1):
+                    jumps_idces.append(jumps[k - i - 1, int(jumps_idces[-1])])
+
+                actual_jumps = [Tau[int(i)] for i in jumps_idces]
+
+                return actual_jumps
+
+        J = mem_arr[k, -1]
 
 def panel_posi_unordered(log_pval_matrix, gamma):
+    """
+    Perform panel post inference selection.
+
+    Parameters:
+    -----------
+    log_pval_matrix : array_like
+        Matrix of log p-values. Should be a 2D array of shape (N, T), where N is the number of tests and T is the number of observations.
+    gamma : float
+        Threshold parameter for selection.
+
+    Returns:
+    --------
+    tuple
+        Tuple containing three elements:
+        - selection_result: Array of indices representing the results from the panel posi algorithm.
+        - rho: Parameter used for threshold calculation.
+        - bonf_selection_result: Array of indices representing the selected tests using Bonferroni correction.
+
+    """
     log_pval_matrix = log_pval_matrix.copy()
     M_set = (~np.isnan(log_pval_matrix)).sum(axis=0)
     K_set = (~np.isnan(log_pval_matrix)).sum(axis=1)
@@ -60,16 +141,32 @@ def panel_posi_unordered(log_pval_matrix, gamma):
 
 
 def cho_chpt(Y):
+    """
+    Perform changepoint detection using the SBS and DCBS algorithms.
+
+    Parameters:
+    -----------
+    Y : array_like
+        Input data. Should be a 2D array of shape (N, T), where N is the number of variables and T is the number of time points.
+
+    Returns:
+    --------
+    tuple
+        Tuple containing two arrays:
+        - chpt_sbs: Array of indices representing the changepoints detected by the SBS algorithm.
+        - dcbs_alg: Array of indices representing the changepoints detected by the DCBS algorithm.
+    """
+    
     Y_r = Y
     nr, nc = Y_r.T.shape
     Yr = ro.r.matrix(Y_r.T, nrow=nr, ncol=nc)
     result_sbs = hdbinseg.sbs_alg(Yr, cp_type=1, temporal=True)
-    result_dcvs = hdbinseg.dcbs_alg(
+    result_dcbs = hdbinseg.dcbs_alg(
         Yr,
         cp_type=1,
     )
     chpt_sbs = np.array(result_sbs[2]).astype(int)
-    dcbs_alg = np.array(result_dcvs[2]).astype(int)
+    dcbs_alg = np.array(result_dcbs[2]).astype(int)
     return chpt_sbs, dcbs_alg
 
 
@@ -101,17 +198,43 @@ def generate_data(
     RegX=False,
 ):
     """
+    Generate synthetic data with jumps and noise.
 
     Args:
-        T (_type_): length of each time series
-        N (_type_): number of time series
-        n_jumps (_type_): number of desired jumps
-        level_bounds (_type_): bounds on the level magnitute
-        min_gaps (_type_, optional): _description_. Defaults to 0. When specified, denotes the minimum time between two jumps
-        partial_effect_ratio (_type_, optional): _description_. Defaults to None. The percentage of series affected by each individual jump.
+        T : int
+            Length of each time series.
+        N : int
+            Number of time series.
+        n_jumps : int
+            Number of desired jumps.
+        level_bounds : float
+            Bounds on the jump level magnitude.
+        min_gaps : int, optional
+            Minimum time between two jumps. Defaults to 0.
+        partial_effect_ratio : float, optional
+            Percentage of series affected by each individual jump. Defaults to 1.
+        show_plot : bool, optional
+            Whether to show plots of the generated data. Defaults to True.
+        heavy_tail : bool, optional
+            Whether to use a heavy-tailed distribution for noises. Defaults to False.
+        poission_corruption : bool, optional
+            Whether to introduce Poisson-corrupted noises. Defaults to False.
+        staircase : bool, optional
+            Whether to create staircase effects in jumps. Defaults to False.
+        AR : bool, optional
+            Whether to add autoregressive (AR) effects to the generated data. Defaults to False.
+        RegX : bool, optional
+            Whether to introduce external regressors (RegX) to the generated data. Defaults to False.
 
     Returns:
-        _type_: _description_
+        tuple
+            Tuple containing the following elements:
+            - full_beta: Matrix of jump magnitudes. Shape: (T, N).
+            - noises: Matrix of noises. Shape: (T, N).
+            - jump_idces: Array of indices representing the jump positions.
+            - Y: Matrix of generated data. Shape: (T, N).
+            - X: Matrix representing the structure of jumps.
+
     """
     assert min_gaps * n_jumps < T
 
@@ -222,6 +345,22 @@ def generate_data(
 
 
 def fuzzy_join(A, N):
+    """
+    Perform fuzzy join operation on multiple lists.
+
+    Parameters:
+    -----------
+    A : list
+        List of input lists.
+    N : int
+        Number of lists to be considered for the join.
+
+    Returns:
+    --------
+    list
+        List of selected elements after the fuzzy join operation.
+
+    """
     maxlen = max(len(r) for r in A)
     selected = []
     for i in range(maxlen):
@@ -236,25 +375,20 @@ def fuzzy_join(A, N):
     return list(set(selected))
 
 
-def get_sparse_X(T, N):
-    X_large = np.zeros((T, T * N))
-    X_small = np.tril(np.ones((T, T)), k=0)
-    X_large[:T, :T] = X_small
-    X_large = coo_matrix(X_large)
-    for i in range(1, N):
-        X_row = np.zeros((T, T * N))
-        X_row[:T, T * i : T * (i + 1)] = X_small
-
-        X_large = vstack((X_large, coo_matrix(X_row)), format="csr")
-    return X_large
-
-
 def cv_lasso(y, X):
-    """returns the pvalues for the case when MSE is largest on validation set.
+    """
+    Perform cross-validated Lasso regression and return the optimal alpha value.
+
     Args:
-        y (_type_): single column of Y
-        X (_type_): whole X matrix
-        lambdas (_type_): list of lambdas to be tried
+        y : array_like
+            Single column of Y.
+        X : array_like
+            Whole X matrix.
+
+    Returns:
+        float
+            Optimal alpha value determined by cross-validated Lasso regression.
+
     """
 
     kf = KFold(n_splits=5, shuffle=True)
@@ -265,13 +399,29 @@ def cv_lasso(y, X):
 
 
 def experiment(beta_mat, epsilon_mat, real_jump_idces, dp_param_J, Y=None, X=None):
-    """perform one set of experiment for N series of lenth T, returns confusion matrices
+    """
+    Perform one set of experiment for N series of length T and return confusion matrices.
 
     Args:
-        beta_mat (np.ndarray): T X N matrix
-        epsilon_mat (np.ndarray): T X N matrix
-        real_jump_idces (_type_): _description_
-        dp_param_J (float): parameter for the rDP algorithm
+        beta_mat : np.ndarray
+            T x N matrix representing the true jump magnitudes.
+        epsilon_mat : np.ndarray
+            T x N matrix representing the noise.
+        real_jump_idces : np.ndarray
+            Array containing the indices of the real jump locations.
+        dp_param_J : float
+            Parameter for the rDP algorithm.
+        Y : np.ndarray, optional
+            Matrix of generated data. Defaults to None.
+        X : np.ndarray, optional
+            Matrix representing the structure of jumps. Defaults to None.
+
+    Returns:
+        pd.DataFrame
+            DataFrame containing the confusion matrix results for different methods.
+        list
+            List containing stored selections, Y matrix, and real jump indices.
+
     """
 
     assert beta_mat.shape == epsilon_mat.shape
@@ -343,14 +493,7 @@ def experiment(beta_mat, epsilon_mat, real_jump_idces, dp_param_J, Y=None, X=Non
             list(set.intersection(*(set(s) for s in rdp_selections)))
         )
 
-        # rdp with fitting TxN array by lasso
-        # X_large = get_sparse_X(T, N)
-        # print('performing lasso on large X, might take some time...')
-        # lam, coeff = cv_lasso(Y.reshape(-1, order = 'F'), X_large)
-        # beta = coeff.reshape((T, N), order = 'F')
-        # large_lasso_selection = np.where(np.any(beta, axis = 1))[0]
-
-        # rdp with fuzzy join
+        # rdp with fuzzy join -- majority voting
         rdp_fuzzy_selection = fuzzy_join(rdp_selections, num_train)
 
         panel_rdp_selection = rDP(
@@ -454,6 +597,22 @@ def parallel_wrapper(
     staircase=False,
     RegX=False,
 ):
+    """
+    Perform one set of experiment for N series of length T and return confusion matrices.
+
+    Args:
+        beta_mat (np.ndarray): T x N matrix representing the true jump magnitudes.
+        epsilon_mat (np.ndarray): T x N matrix representing the noise.
+        real_jump_idces (np.ndarray): Array containing the indices of the real jump locations.
+        dp_param_J (float): Parameter for the rDP algorithm.
+        Y (np.ndarray, optional): Matrix of generated data. Defaults to None.
+        X (np.ndarray, optional): Matrix representing the structure of jumps. Defaults to None.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the confusion matrix results for different methods.
+        list: List containing stored selections, Y matrix, and real jump indices.
+
+    """
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         beta, noises, jump_idces, Y, X = generate_data(
@@ -488,6 +647,29 @@ def parallel_experiments(
     staircase=False,
     RegX=False,
 ):
+    
+    """
+    Perform parallel experiments for a given number of runs and return summary statistics.
+
+    Args:
+        n_runs (int): Number of experiment runs to perform.
+        n_jobs (int): Number of parallel jobs to run.
+        T (int, optional): Length of the series. Defaults to 100.
+        N (int, optional): Number of series. Defaults to 10.
+        n_jumps (int, optional): Number of jumps. Defaults to 1.
+        level_bounds (int, optional): Level bounds for jumps. Defaults to 10.
+        min_gaps (int, optional): Minimum gap between jumps. Defaults to 0.
+        partial_effect_ratio (float, optional): Partial effect ratio. Defaults to 1.
+        heavy_tail (bool, optional): Flag indicating heavy-tailed noise. Defaults to False.
+        poission_corruption (bool, optional): Flag indicating Poisson corruption. Defaults to False.
+        J (float, optional): Parameter for the rDP algorithm. Defaults to 0.8.
+        staircase (bool, optional): Flag indicating staircase jumps. Defaults to False.
+        RegX (bool, optional): Flag indicating RegX structure. Defaults to False.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the summary statistics of the confusion matrix results.
+    """
+    
     identifier = f"nruns={n_runs}_T={T}_N={N}_n_jumps={n_jumps}_level_bounds={level_bounds}_min_gaps={min_gaps}_partial_effect_ratio={partial_effect_ratio}_heavy_tail={heavy_tail}_poission_corruption={poission_corruption}_J={J}_staircase={staircase}_RegX={RegX}"
     fname = f"{identifier}.csv"
 

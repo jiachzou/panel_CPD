@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Activate conda environment
-conda create -n env_name python=3.9
-conda activate env_name
+conda create -n panel_CPD python=3.9
+conda activate panel_CPD
 
 # Install Python dependencies using pip
 pip install -r requirements.txt

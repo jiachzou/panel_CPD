@@ -1,14 +1,16 @@
-## POSI for panel change-point detection
-Files in this repo:
-- ```run_experiments.py``` generates and compiles experiment results
-- ```core.py``` contains the implementation loop of the change-point detection experiments
-- ```dp.py``` contains the implementation of rDP.
-- ```lasso.py``` contains corrections to ```selectinf``` package
+## POSI for Panel Change-Point Detection
 
-Installation:
-- Install anaconda
-- Run ```bash install.sh```
+### Repository Files
+- `run_experiments.py`: Generates and compiles experiment results.
+- `core.py`: Contains the implementation loop of the change-point detection experiments.
+- `lasso.py`: Contains corrections to the `selectinf` package.
 
-Instructions to run the experiment:
-- Run ```python run_experiments.py```
-- Results can be found in ```results/main_result.csv```
+### Installation
+1. Install Anaconda.
+2. Run the command `bash install.sh` in your terminal. This will create an environment named `panel_CPD` with all the necessary dependencies for you.
+
+### Instructions to Run the Experiment
+1. Open your terminal.
+2. Activate the `panel_CPD` environment using the command `conda activate panel_CPD`.
+3. Run the command `python run_experiments.py`.
+4. The results of the experiment will be saved in the file `results/main_result.csv`.
