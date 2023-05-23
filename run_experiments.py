@@ -1,19 +1,13 @@
-from core import experiment, generate_data, parallel_experiments
-
-# import os
-# os.environ["OMP_NUM_THREADS"] = "30" # export OMP_NUM_THREADS=1
-# os.environ["OPENBLAS_NUM_THREADS"] = "30" # export OPENBLAS_NUM_THREADS=1
-# os.environ["MKL_NUM_THREADS"] = "30" # export MKL_NUM_THREADS=1
-# os.environ["VECLIB_MAXIMUM_THREADS"] = "30" # export VECLIB_MAXIMUM_THREADS=1
-# os.environ["NUMEXPR_NUM_THREADS"] = "30"
-
+from core import parallel_experiments
 import numpy as np
+import pandas as pd
+import os
 
-for partial_effect_ratio in [0.5,1]:
-    for level_bounds in [1,2,5,10]:
+for partial_effect_ratio in [0.5, 1]:
+    for level_bounds in [1, 2, 5, 10]:
         for n in np.array([2e2]).astype(int):
             parallel_experiments(
-                n_runs=30,
+                n_runs=100,
                 n_jobs=2,
                 N=n,
                 T=300,
@@ -25,21 +19,40 @@ for partial_effect_ratio in [0.5,1]:
                 poission_corruption=False,
                 J=0.8,
                 staircase=False,
-                RegX=False
+                RegX=True,
             )
+# %%
 
+dir = "results"
+files = os.listdir(dir)
+tables = []
+cols = [
+    "nruns",
+    "J",
+    "T",
+    "N",
+    "level_bounds",
+    "partial_effect_ratio",
+    "staircase",
+    "RegX",
+]
+#%%
+for fname in files:
+    if "nruns=" in fname:
+        tb = pd.read_csv(f"{dir}/{fname}", index_col=[0, 1])
+        for col in cols:
+            if col in ["staircase", "RegX"]:
+                # for booleans
+                tb[col] = fname.split(col + "=")[1].split("_")[0].strip(".csv")
+            else:
+                # for floats
+                tb[col] = float(fname.split(col + "=")[1].split("_")[0].strip(".csv"))
+        tables.append(tb)
 
-# quick test
-# parallel_experiments(
-#                 n_runs=1,
-#                 n_jobs=2,
-#                 N=20,
-#                 T=100,
-#                 n_jumps=10,
-#                 level_bounds=1,
-#                 min_gaps=0,
-#                 partial_effect_ratio=1,
-#                 heavy_tail=False,
-#                 poission_corruption=False,
-#                 J=0.8
-#             )
+pd.concat(tables).to_csv(f"{dir}/full_result.csv")
+tmp = (
+    pd.concat([t.loc["mean"] for t in tables])
+    .drop(["ins_mse", "ins_mae", "oos_mse", "oos_mae"], axis=1)
+    .sort_values(by=cols, ascending=True)
+)
+tmp.to_csv(f"{dir}/main_result.csv")

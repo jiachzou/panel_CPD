@@ -6,11 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import cross_validate, KFold
 from selectinf.algorithms.api import lasso
-from multiple_testing import (
-    generate_fake_data,
-    generate_fake_log_pvals,
-    panel_posi_unordered,
-)
+
 from dp import rDP
 from collections import Counter
 from matplotlib import pyplot as plt
@@ -21,11 +17,46 @@ import rpy2.robjects as ro
 import rpy2.robjects.numpy2ri
 import rpy2.robjects.packages as rpackages
 import pickle
-from posi_inf import get_log_p_no_cv
+
 from sklearn.linear_model import LinearRegression
 
 rpy2.robjects.numpy2ri.activate()
 hdbinseg = rpackages.importr("hdbinseg")
+
+
+def panel_posi_unordered(log_pval_matrix, gamma):
+    log_pval_matrix = log_pval_matrix.copy()
+    M_set = (~np.isnan(log_pval_matrix)).sum(axis=0)
+    K_set = (~np.isnan(log_pval_matrix)).sum(axis=1)
+    simultaneity_count_array = np.zeros(shape=log_pval_matrix.shape[0])
+    for i in range(log_pval_matrix.shape[0]):
+        simultaneity_count_array[i] = np.sum(
+            M_set[np.where(~np.isnan(log_pval_matrix)[i, :])[0]]
+        )
+
+    log_pval_matrix[np.isnan(log_pval_matrix)] = np.inf
+    smallest_log_pval_array = np.nanmin(log_pval_matrix, axis=1)
+    rho_inv = np.sum(
+        K_set[simultaneity_count_array > 0]
+        / simultaneity_count_array[simultaneity_count_array > 0]
+    )
+    rho = 1 / rho_inv
+
+    thresholds = np.log(gamma) - np.log(simultaneity_count_array) + np.log(rho)
+    bonf_thresholds = (
+        np.log(gamma)
+        - np.log(log_pval_matrix.shape[0])
+        - np.log(log_pval_matrix.shape[1])
+    )
+
+    selection_result = np.where(
+        (smallest_log_pval_array <= thresholds) & (simultaneity_count_array > 0)
+    )[0]
+    bonf_selection_result = np.where(
+        (smallest_log_pval_array <= bonf_thresholds) & (simultaneity_count_array > 0)
+    )[0]
+
+    return selection_result, rho, bonf_selection_result
 
 
 def cho_chpt(Y):
@@ -218,21 +249,6 @@ def get_sparse_X(T, N):
     return X_large
 
 
-# def cv_lasso(y, X):
-#     """returns the pvalues for the case when MSE is largest on validation set.
-
-#     Args:
-#         y (_type_): single column of Y
-#         X (_type_): whole X matrix
-#         lambdas (_type_): list of lambdas to be tried
-#     """
-
-#     lars = LassoLarsCV(
-#         cv=5, fit_intercept=False)
-#     lars_fitted = lars.fit(X=X, y=y)
-#     return lars_fitted.alpha_
-
-
 def cv_lasso(y, X):
     """returns the pvalues for the case when MSE is largest on validation set.
     Args:
@@ -310,8 +326,6 @@ def experiment(beta_mat, epsilon_mat, real_jump_idces, dp_param_J, Y=None, X=Non
 
     pvals[(pvals < 1e-32)] = 1e-32
 
-    p_log_JC = get_log_p_no_cv(X, Y[:, train_index], alphas=alphas)
-
     P_value_log = np.log(pvals)
 
     rst_data = []
@@ -320,11 +334,6 @@ def experiment(beta_mat, epsilon_mat, real_jump_idces, dp_param_J, Y=None, X=Non
         # posi
         posi_selection, rho, bonf_selection_result = panel_posi_unordered(
             P_value_log, posi_gamma
-        )
-
-        # posi with JC algo
-        posi_selection_JC, rho_JC, bonf_selection_result_JC = panel_posi_unordered(
-            p_log_JC, posi_gamma
         )
 
         # rdp with union and join
@@ -351,13 +360,11 @@ def experiment(beta_mat, epsilon_mat, real_jump_idces, dp_param_J, Y=None, X=Non
 
         all_selections = [
             posi_selection,
-            posi_selection_JC,
             rdp_union,
             rdp_intersection,
             rdp_fuzzy_selection,
             panel_rdp_selection,
             bonf_selection_result,
-            bonf_selection_result_JC,
             sbs_selection,
             dcbs_selection,
         ]
@@ -365,13 +372,11 @@ def experiment(beta_mat, epsilon_mat, real_jump_idces, dp_param_J, Y=None, X=Non
         for name, selection in zip(
             [
                 "posi",
-                "posi with JC algo",
                 "rdp_union",
                 "rdp_intersection",
                 "rdp_majority_voting",
                 "panel_rdp",
                 "bonf_selection",
-                "bonf with JC algo",
                 "sbs",
                 "dcbs",
             ],
@@ -401,8 +406,7 @@ def experiment(beta_mat, epsilon_mat, real_jump_idces, dp_param_J, Y=None, X=Non
             ]
             if name == "posi":
                 rst_row.append(rho)
-            elif name == "posi with JC algo":
-                rst_row.append(rho_JC)
+
             else:
                 rst_row.append(np.nan)
             f1 = 2 * tp / (2 * tp + fp + fn)
@@ -486,6 +490,11 @@ def parallel_experiments(
 ):
     identifier = f"nruns={n_runs}_T={T}_N={N}_n_jumps={n_jumps}_level_bounds={level_bounds}_min_gaps={min_gaps}_partial_effect_ratio={partial_effect_ratio}_heavy_tail={heavy_tail}_poission_corruption={poission_corruption}_J={J}_staircase={staircase}_RegX={RegX}"
     fname = f"{identifier}.csv"
+
+    if not os.path.exists("results"):
+        os.mkdir("results")
+    if not os.path.exists("states"):
+        os.mkdir("states")
     done_files = os.listdir("results")
     if fname in done_files:
         return
@@ -527,6 +536,7 @@ def parallel_experiments(
 
     rst_df.to_csv(f"results/{fname}")
     states = [tup[1] for tup in tups]
+
     with open(f"states/{identifier}.pickle", "wb") as handle:
         pickle.dump(states, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return rst_df

@@ -2,28 +2,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Generate data
-# np.random.seed(0)
-# A = np.array([1, 4, 2, 6])
-# varw = 0.5
-# sig = np.sqrt(varw)
-# x = np.concatenate([sig*np.random.randn(20) + A[0],
-#                     sig*np.random.randn(30) + A[1],
-#                     sig*np.random.randn(15) + A[2],
-#                     sig*np.random.randn(35) + A[3]])
-# N = len(x)
-# #%%
-# # %%
-# import numpy as np
-
-
-# Kmax= 5
-# Tau = [10,18,19,20,21,
-#        43,44,48,49,50,
-#        51,60,61,62,63,64]
-# ratio = 0.7
-# Tau = np.array(list(range(100)))
-
 
 def rDP(x, Tau, ratio, Kmax):
     """
@@ -69,19 +47,3 @@ def rDP(x, Tau, ratio, Kmax):
                 return actual_jumps
 
         J = mem_arr[k, -1]
-
-    # return Tau
-
-
-# %%
-
-
-# actual_jumps = rDP(x, Tau, ratio, Kmax)
-
-# plt.plot(x)
-# for i in range(len(actual_jumps)):
-#     plt.axvline(actual_jumps[i])
-
-# # %%
-# actual_jumps
-# # %%
