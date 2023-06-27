@@ -1,4 +1,4 @@
-## POSI for Panel Change-Point Detection
+## Panel Multiple Testing for Panel Change-Point Detection
 
 ### Usage
 
