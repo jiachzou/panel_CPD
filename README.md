@@ -6,7 +6,7 @@ To cite this code, please use the following two citations:
 1. The core functionalities of this repo replicates a working paper at non-archival workshop SPIGM @ ICML 2023,
 ```
 @article{zouyangpelger2023cpd,
-  title={Large Dimensional Change Point Detection with \\FWER Control as Automatic Stopping},
+  title={Large Dimensional Change Point Detection with FWER Control as Automatic Stopping},
   author={Zou, Jiacheng and Fan, Yang and Pelger, Markus},
   journal={ICML 2023 Workshop on Structured Probabilistic Inference & Generative Modeling},
   year={2023}
