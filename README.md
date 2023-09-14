@@ -30,7 +30,8 @@ To cite this code, please use the following two citations:
 
 ### Installation
 1. Install Anaconda.
-2. Run the command `bash install.sh` in your terminal. This will create an environment named `panel_CPD` with all the necessary dependencies for you.
+2. Install R https://cran.rstudio.com/
+3. Run the command `bash install.sh` in your terminal. This will create an environment named `panel_CPD` with all the necessary dependencies for you.
 
 ### Instructions to Run the Experiment
 1. Open your terminal.
