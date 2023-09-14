@@ -41,7 +41,8 @@ conda install statsmodels
 
 # Install gcc using conda-forge
 conda install -c conda-forge gcc
-
+# Install rpy2 using conda-forge
+conda install -c conda-forge rpy2
 # Run python install_rpy_package.py and select yes if necessary
 python install_rpy_package.py
 
