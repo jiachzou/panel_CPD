@@ -1,5 +1,7 @@
 ## Panel Multiple Testing for Panel Change-Point Detection
 
+[(Paper)](https://drive.google.com/file/d/15SotyMqpWBUTrwaCpzNGron2F4uz1wdL/view?usp=sharing) [(Poster)](https://drive.google.com/file/d/14xcom92GMaCcFZpjLXblOc4K5FlCr6rP/view?usp=sharing) 
+
 ### Usage
 
 To cite this code, please use the following two citations:
